@@ -10,7 +10,14 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from config.settings import (
+    IMAGE_UPLOAD_DIR,
+    OCR_MAX_IMAGE_SIZE_MB,
+    OCR_MIN_CONFIDENCE,
+    SUPPORTED_IMAGE_EXTENSIONS,
+)
 from core.loaders import document_loader_branch
+from core.ocr import load_image_bytes_with_ocr, validate_image_filename
 
 
 class ChromaLangChainRetriever(BaseRetriever):
@@ -127,33 +134,35 @@ class KnowledgeBasePipeline:
             ".cpp": "cpp_code",
             ".c": "c_code",
         }
+        for image_ext in SUPPORTED_IMAGE_EXTENSIONS:
+            type_mapping[image_ext] = "image_ocr"
         return type_mapping.get(ext, ext.removeprefix(".") or "text")
 
-    def ingest(self, input_source: str) -> Dict[str, Any]:
-        """Loads, chunks, embeds, and stores an external knowledge source into ChromaDB."""
-        # 1. Load raw documents using the unified document loader branch
-        raw_docs = document_loader_branch.invoke(input_source)
+    def _ingest_documents(
+        self,
+        raw_docs: List[Document],
+        source_label: str,
+        source_type: str,
+        extra_result: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Chunks raw LangChain Documents, sanitizes metadata, and upserts into ChromaDB."""
         if not raw_docs:
             return {
                 "status": "warning",
-                "source": input_source,
+                "source": source_label,
                 "chunks_ingested": 0,
                 "message": "No documents extracted from source.",
             }
 
-        # 2. Chunk documents
         chunked_docs = self.text_splitter.split_documents(raw_docs)
         if not chunked_docs:
             return {
                 "status": "warning",
-                "source": input_source,
+                "source": source_label,
                 "chunks_ingested": 0,
                 "message": "Source yielded no content chunks.",
             }
 
-        source_type = self._detect_source_type(input_source)
-
-        # 3. Prepare Chroma batch payloads
         ids = []
         documents = []
         metadatas = []
@@ -163,9 +172,9 @@ class KnowledgeBasePipeline:
             if not chunk_content:
                 continue
 
-            chunk_id = self._generate_chunk_id(input_source, idx, chunk_content)
+            chunk_id = self._generate_chunk_id(source_label, idx, chunk_content)
             meta = dict(chunk.metadata)
-            meta["source"] = input_source
+            meta["source"] = source_label
             meta["source_type"] = source_type
             meta["chunk_index"] = idx
 
@@ -178,24 +187,81 @@ class KnowledgeBasePipeline:
         if not ids:
             return {
                 "status": "warning",
-                "source": input_source,
+                "source": source_label,
                 "chunks_ingested": 0,
                 "message": "All chunks were empty.",
             }
 
-        # 4. Upsert into ChromaDB
         self.collection.upsert(
             ids=ids,
             documents=documents,
             metadatas=metadatas,
         )
 
-        return {
+        result: Dict[str, Any] = {
             "status": "success",
-            "source": input_source,
+            "source": source_label,
             "source_type": source_type,
             "chunks_ingested": len(ids),
         }
+        if extra_result:
+            result.update(extra_result)
+        return result
+
+    def ingest(self, input_source: str) -> Dict[str, Any]:
+        """Loads, chunks, embeds, and stores an external knowledge source into ChromaDB."""
+        raw_docs = document_loader_branch.invoke(input_source)
+        source_type = self._detect_source_type(input_source)
+        return self._ingest_documents(
+            raw_docs=raw_docs,
+            source_label=input_source,
+            source_type=source_type,
+        )
+
+    def ingest_uploaded_image(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        save_to_disk: bool = False,
+        upload_dir: Optional[str] = None,
+        min_confidence: float = OCR_MIN_CONFIDENCE,
+    ) -> Dict[str, Any]:
+        """Extracts text from uploaded image bytes via OCR and ingests it into ChromaDB."""
+        safe_name = validate_image_filename(filename)
+        if not isinstance(file_bytes, (bytes, bytearray)) or len(file_bytes) == 0:
+            raise ValueError("Uploaded image payload is empty.")
+        if len(file_bytes) > OCR_MAX_IMAGE_SIZE_MB * 1024 * 1024:
+            raise ValueError(
+                f"Uploaded image exceeds maximum size of {OCR_MAX_IMAGE_SIZE_MB} MB."
+            )
+
+        source_label = safe_name
+        if save_to_disk:
+            target_dir = os.path.abspath(upload_dir or IMAGE_UPLOAD_DIR)
+            os.makedirs(target_dir, exist_ok=True)
+            source_label = os.path.join(target_dir, safe_name)
+
+        raw_docs = load_image_bytes_with_ocr(
+            file_bytes=bytes(file_bytes),
+            filename=safe_name,
+            source_name=source_label,
+            min_confidence=min_confidence,
+        )
+
+        if save_to_disk:
+            with open(source_label, "wb") as f:
+                f.write(file_bytes)
+
+        extra = {}
+        if raw_docs:
+            extra["ocr_confidence"] = raw_docs[0].metadata.get("ocr_confidence", 0.0)
+
+        return self._ingest_documents(
+            raw_docs=raw_docs,
+            source_label=source_label,
+            source_type="image_ocr",
+            extra_result=extra,
+        )
 
     def ingest_batch(self, sources: List[str]) -> List[Dict[str, Any]]:
         """Batch ingestion helper for multiple knowledge sources."""

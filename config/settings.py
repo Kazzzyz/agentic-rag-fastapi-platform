@@ -50,3 +50,13 @@ ANALYST_MAX_FEEDBACK_LOOPS = 2      # max round-trips back to the Retriever Agen
 ANALYST_MAX_TOOL_STEPS = 6          # max tool-calling iterations per reasoning pass
 ANALYST_MAX_FOLLOW_UP_QUERIES = 2   # max follow-up queries sent per feedback loop
 ANALYST_EVIDENCE_CHAR_LIMIT = 1500  # chars of each evidence chunk shown to the LLM
+
+# ── Image Upload & OCR Configuration ──
+SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
+OCR_MIN_CONFIDENCE = 0.3
+OCR_MAX_IMAGE_SIZE_MB = 20
+IMAGE_UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "uploads",
+    "images",
+)

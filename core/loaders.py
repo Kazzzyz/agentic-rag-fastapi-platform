@@ -15,6 +15,8 @@ from langchain_community.document_loaders import (
 from langchain_community.document_loaders.generic import GenericLoader
 from langchain_community.document_loaders.parsers import LanguageParser
 
+from core.ocr import SUPPORTED_IMAGE_EXTENSIONS, load_image_with_ocr
+
 # Instead of loading the 150MB speech-to-text model on every import,
 # we use lazy initialization so it only loads when an audio file is processed.
 _whisper_model = None
@@ -172,7 +174,12 @@ document_loader_branch = RunnableBranch(
         lambda x: has_ext(x, {".wav"}),
         RunnableLambda(load_wav_with_whisper),
     ),
-    # 8. Source-Code Files
+    # 8. Image Files (RapidOCR -> Document)
+    (
+        lambda x: has_ext(x, SUPPORTED_IMAGE_EXTENSIONS),
+        RunnableLambda(load_image_with_ocr),
+    ),
+    # 9. Source-Code Files
     (
         lambda x: has_ext(x, SOURCE_CODE_EXTENSIONS),
         RunnableLambda(load_source_code),

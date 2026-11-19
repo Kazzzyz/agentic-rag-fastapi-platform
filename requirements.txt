@@ -17,3 +17,4 @@ python-dotenv
 pytest
 Pillow
 rapidocr-onnxruntime
+reportlab

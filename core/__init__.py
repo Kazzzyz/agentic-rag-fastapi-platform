@@ -15,6 +15,8 @@ from core.answer_tools import (
     response_formatter,
 )
 from core.orchestrator import Orchestrator, run_orchestrator
+from core.report_agent import run_report_agent
+from core.report_tools import ReportBuilder, make_report_tools
 
 __all__ = [
     "document_loader_branch",
@@ -30,4 +32,7 @@ __all__ = [
     "response_formatter",
     "Orchestrator",
     "run_orchestrator",
+    "run_report_agent",
+    "ReportBuilder",
+    "make_report_tools",
 ]

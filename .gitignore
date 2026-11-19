@@ -242,6 +242,7 @@ huggingface_cache/
 tmp/
 temp/
 uploads/
+reports/
 *.tmp
 
 # IDEs & OS metadata

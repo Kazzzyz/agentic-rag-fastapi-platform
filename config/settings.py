@@ -60,3 +60,10 @@ IMAGE_UPLOAD_DIR = os.path.join(
     "uploads",
     "images",
 )
+
+# ── Report Generator Agent ──
+REPORT_MAX_STEPS = 100  # LangGraph recursion limit (each design tool call uses steps)
+REPORT_OUTPUT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "reports",
+)

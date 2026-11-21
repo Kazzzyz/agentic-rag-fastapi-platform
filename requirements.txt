@@ -18,3 +18,8 @@ pytest
 Pillow
 rapidocr-onnxruntime
 reportlab
+fastapi
+uvicorn
+python-multipart
+groq
+httpx

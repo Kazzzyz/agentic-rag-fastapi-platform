@@ -67,3 +67,19 @@ REPORT_OUTPUT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(__file__)),
     "reports",
 )
+
+# ── Voice & Speech-To-Text (STT) Configuration ──
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+STT_PROVIDER = os.getenv("STT_PROVIDER", "groq")
+GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
+AUDIO_UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "uploads",
+    "audio",
+)
+SUPPORTED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".webm", ".flac", ".aac"}
+AUDIO_MAX_SIZE_MB = 25
+
+# ── FastAPI Server Configuration ──
+API_HOST = os.getenv("API_HOST", "0.0.0.0")
+API_PORT = int(os.getenv("API_PORT", 8000))

@@ -177,30 +177,52 @@ The knowledge base also exposes methods to ingest multiple sources, list stored 
 - **Keyword retrieval:** `rank-bm25`
 - **Reranking:** `cross-encoder/ms-marco-MiniLM-L-6-v2`
 - **Document processing:** PyMuPDF, docx2txt, python-pptx, LangChain document loaders
-- **Audio transcription:** Faster-Whisper
+- **Speech-to-Text & Voice:** Groq Whisper (`whisper-large-v3-turbo`) with Faster-Whisper fallback
+- **Web API framework:** FastAPI, Uvicorn, Pydantic V2
 - **Testing:** pytest and mocked language-model responses
 
 ## Project Structure
 
 ```text
-agentic-hybrid-rag/
+agentic-rag-fastapi-platform/
+├── api/
+│   ├── routes/
+│   │   ├── system.py           # Health checks and knowledge base stats
+│   │   ├── documents.py        # File, path, batch, and OCR image ingestion
+│   │   ├── query.py            # Text-based agentic RAG query endpoint
+│   │   ├── voice.py            # Voice query and audio transcription endpoints
+│   │   └── reports.py          # PDF report generation and download
+│   ├── static/
+│   │   └── index.html          # Interactive Web UI with live microphone recording
+│   ├── dependencies.py         # KnowledgeBasePipeline singleton dependency
+│   ├── schemas.py              # Pydantic request/response schemas
+│   └── main.py                 # FastAPI application and route registration
 ├── config/
-│   └── settings.py             # Model, retrieval, and agent settings
+│   └── settings.py             # Model, retrieval, STT, and agent settings
 ├── core/
 │   ├── loaders.py              # Format-aware document loaders
+│   ├── ocr.py                  # RapidOCR image loader
+│   ├── voice.py                # Groq Whisper STT and voice query integration
 │   ├── retriever_agent.py      # LangGraph retrieval workflow
 │   ├── retriever_tools.py      # Hybrid-search and selection tools
 │   ├── analyst_agent.py       # Evidence analysis and feedback loop
 │   ├── analyst_tools.py       # Calculation and analysis tools
 │   ├── answer_agent.py        # Final answer generation and validation
 │   ├── answer_tools.py        # Citation, source, and response tools
+│   ├── report_agent.py        # Report Generator Agent
+│   ├── report_tools.py        # ReportLab PDF building tools
 │   └── orchestrator.py        # Connects the three agents
 ├── database/
 │   └── chroma_pipeline.py     # Ingestion, embedding, persistence, retrieval
 ├── tests/
+│   ├── test_api.py            # FastAPI endpoint tests
+│   ├── test_voice.py          # Voice query and Groq Whisper STT tests
+│   ├── test_ocr.py            # OCR image processing tests
+│   ├── test_report.py         # PDF report agent tests
 │   ├── test_retriever.py
 │   ├── test_analyst.py
 │   └── test_answer.py
+├── main.py                     # Root server runner
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt
@@ -264,7 +286,44 @@ LLM_MODEL=openrouter/free
 
 **Never commit `.env` or real API credentials.**
 
-## Usage
+## Running the FastAPI Server
+
+Launch the production FastAPI application:
+
+```bash
+python main.py
+```
+
+Or using `uvicorn`:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+- **Interactive Web UI**: Open [http://localhost:8000/](http://localhost:8000/) or [http://localhost:8000/ui](http://localhost:8000/ui) in your browser. Record questions directly with your microphone, run text queries, upload documents or OCR images, listen to answers via audio, and generate PDF reports.
+- **Interactive Swagger API Docs**: Explore and test all endpoints at [http://localhost:8000/docs](http://localhost:8000/docs).
+- **ReDoc Documentation**: [http://localhost:8000/redoc](http://localhost:8000/redoc).
+
+### API Endpoints Summary
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/health` / `/api/v1/health` | System health, active LLM & Groq STT models |
+| `GET` | `/api/v1/stats` | ChromaDB collection statistics and indexed sources |
+| `POST` | `/api/v1/query` | Execute 3-agent Hybrid RAG query |
+| `POST` | `/api/v1/voice/query` | Microphone/audio voice query transcribed via Groq Whisper (`whisper-large-v3-turbo`) and answered by RAG agents |
+| `POST` | `/api/v1/voice/transcribe` | Transcribe audio files (.wav, .mp3, .webm, .m4a, .ogg) to text |
+| `POST` | `/api/v1/documents/ingest-file` | Upload and ingest document file (.pdf, .docx, .txt, .pptx, images) |
+| `POST` | `/api/v1/documents/ingest-image` | RapidOCR image text extraction and vector storage |
+| `POST` | `/api/v1/documents/ingest-path` | Ingest local path, web URL, or Wikipedia topic (`wiki:Topic`) |
+| `POST` | `/api/v1/documents/ingest-batch` | Batch ingest multiple sources |
+| `GET` | `/api/v1/documents` | List all indexed document sources |
+| `DELETE` | `/api/v1/documents/{source}` | Delete chunks associated with a specific source |
+| `DELETE` | `/api/v1/documents` | Clear entire knowledge base collection |
+| `POST` | `/api/v1/reports/generate` | Generate professional PDF report via Report Generator Agent |
+| `GET` | `/api/v1/reports/download/{filename}` | Download generated PDF report |
+
+## Python Usage
 
 The most direct way to use the system is to ingest a document, then call the Orchestrator. Create a file called `demo.py` in the **project root**:
 
@@ -331,9 +390,13 @@ python -m pytest tests/ -q
 Run specific suites during development:
 
 ```bash
+python -m pytest tests/test_api.py -q
+python -m pytest tests/test_voice.py -q
 python -m pytest tests/test_retriever.py -q
 python -m pytest tests/test_analyst.py -q
 python -m pytest tests/test_answer.py -q
+python -m pytest tests/test_ocr.py -q
+python -m pytest tests/test_report.py -q
 ```
 
 The Answer Agent tests exercise citation mapping, duplicate references, invalid evidence IDs, PDF page metadata, source formatting, and simulated agent execution. **Mocked unit tests do not replace a real end-to-end test** with an ingested document and an active OpenRouter model.
